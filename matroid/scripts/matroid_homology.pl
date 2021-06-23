@@ -18,14 +18,16 @@ sub getUserInfo {
 		chomp($oper);
 	}
 	
-	print "What minor-closed class of matroids are to be considered? \n";
-	print "Use all caps and enter a polyDB recognized descriptor. \n";
-	print "If you wish to consider all matroids, enter NESTED. \n";
-	printn "Desired class: ";
-	my $MATROIDCLASS = <>;
-	chomp($MATROIDCLASS);
+	my $matroidType = -1;
+	my $allowedTypes = new Set(0,1,2,3);
+	
+	while($allowedTypes->contains($matroidType) != 1){
+		print "What class of matroids are considered? \n";
+		print "ALL = NESTED = 0 , REGULAR = 1, BINARY = 2 , TERNARY = 3: \n";
+		$matroidType = <>;
+		chomp($matroidType);
 	}
-	return ($n,$r,$oper,$MATROIDCLASS);
+	return ($n,$r,$oper,$matroidType);
 }
 
 #Open polyDB and create proper cursor
@@ -33,7 +35,7 @@ sub getUserInfo {
 sub collectionFromPolyDB {
 	my $n = $_[0];
 	my $r = $_[1];
-	my $MATROIDCLASS = $_[2];
+	my $matroidType = $_[2];
 	polyDB;
 	$PolyDB::default::db_section_name = "Matroids";
 	$PolyDB::default::db_collection_name = "Small";
@@ -42,26 +44,207 @@ sub collectionFromPolyDB {
 	my $matroidsRN;
 	my $matroidsCount;
 	
-	if($n/2>=$r){
-		$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,$MATROIDCLASS=>true});
-		$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,$MATROIDCLASS=>true});
+	#"ALL = NESTED = 0 , REGULAR = 1, BINARY = 2 , TERNARY = 3
+	if($matroidType == 0){
+		if($n/2>=$r){
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"NESTED"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"NESTED"=>true});
+		}
+		else{
+			# We use the fact that matorid classes of a fixed cyclic width are dual-closed, in particular cyclic width of one.
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"NESTED"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"NESTED"=>true});
+		}
 	}
-	else{
-		$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,$MATROIDCLASS=>true});
-		$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,$MATROIDCLASS=>true});
+	
+	if($matroidType == 1){
+		if($n/2>=$r){
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"REGULAR"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"REGULAR"=>true});
+		}
+		else{
+			# Regular matroids are dual-closed
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"REGULAR"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"REGULAR"=>true});
+		}
+	}
+	
+	if($matroidType == 2){
+		if($n/2>=$r){
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"BINARY"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"BINARY"=>true});
+		}
+		else{
+			# Binary matroids are dual-closed
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"BINARY"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"BINARY"=>true});
+		}
+	}
+	if($matroidType == 3){
+		if($n/2>=$r){
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"TERNARY"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,"TERNARY"=>true});
+		}
+		else{
+			# Ternary matroids are dual-closed
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"TERNARY"=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,"TERNARY"=>true});
+		}
 	}
 	
 	return ($matroidsRN,$matroidsCount);
 }
 
+#This computes the S_n representation given by the action on the indicator vectors.
+#Two faster versions are known, one is implemented in C++.
+sub representationOfSn {
+	my $n = $_[0];
+	my $r = $_[1];
+	my $allChains = $_[2];
+	my $length = $_[3];
+	my $listOfMatrixReps = [];
+	my $group = group::symmetric_group($n);
+	for my $perm (@{group::all_group_elements($group->REGULAR_REPRESENTATION)}){
+		my $matrix = new Matrix($length,$length);
+		for my $originalIndex (0..($length-1)){
+			my $chainMatrix = new Matrix($allChains->[$originalIndex]);
+			my $permChainMatrix = $chainMatrix*$perm;
+			for my $finalIndex (0..($length-1)){
+				if($permChainMatrix == new Matrix($allChains->[$finalIndex])){
+					$matrix->elem($originalIndex,$finalIndex) = 1;
+				}
+			}
+		}
+		push @$listOfMatrixReps, $matrix;
+	}
+	return $listOfMatrixReps;
+}
+
+#What it says on the tin. Takes in a matroid, some properties of it, and 
+sub indicatorVectorProducer {
+	my $matroid = $_[0];
+	my $n = $_[1];
+	my $r = $_[2];
+	my $allChains = $_[3];
+	my $dim = $_[4];
+	
+	my $listOfChainMatrices = $_[5];
+	
+	my $indicatorVector = zero_vector($dim);
+	for my $index (0..($dim-1)){
+		my $indexChain = new Matrix($allChains->[$index]);
+		my $check =0;
+		for my $chainMatrix (@{$listOfChainMatrices}){
+			#print $indexChain;
+			#print "\n = \n";
+			#print $chainMatrix;
+			#print "\n \n";
+			#<>;
+			if($indexChain == $chainMatrix){
+				$check =1;
+			}
+		}
+		if($check ==1){
+			$indicatorVector = $indicatorVector + unit_vector($dim,$index);
+		}
+	}
+	return $indicatorVector;
+}
+
+# This subroutine converts a matroid into a set of matrices, each matrix representing a chain of flats. It is inefficient and a better implementation is known and applied in C++ using polymake methods.
+sub chainsOfFlats {
+	my $matroid = $_[0];
+	my $n = $_[1];
+	my $r = $_[2];
+	my $latticeOfFlats = $matroid->LATTICE_OF_FLATS;
+	my $chains = maximal_chains_of_lattice($latticeOfFlats);
+	my $listOfChainMatrices = [];
+	
+	for my $chain (@{$chains}){
+		#print $chain;
+		#print "\n";
+		#<>;
+		my $chainMatrix = zero_matrix(0,$n);
+		my $chainMatrix = new Matrix($r+1,$n);
+		for my $rowCounter (0..$r){
+			my $faceOfChain = $chain->[-(1+$rowCounter)];
+			my $setInChain = $latticeOfFlats->FACES->[$faceOfChain];
+			for my $elem (@{$setInChain}){
+				$chainMatrix->elem($rowCounter,$elem) = 1;
+			}
+		}
+		#This line is needed due to the way the lattice of flats is transversed. Sometimes it will began at the emptyset and othertimes at the entire set. This check determines if it's transversed it backward and flips the matrix if so.
+		if($chainMatrix->row(0) != zero_vector($n)){
+			my $flipChainMatrix = new Matrix($r+1,$n);
+			for my $rowCounter (0..$r){
+				$flipChainMatrix->row($r-$rowCounter)=$chainMatrix->row($rowCounter);
+			}
+			$chainMatrix = $flipChainMatrix;
+		}
+		
+		push @$listOfChainMatrices,$chainMatrix;
+	}
+	return $listOfChainMatrices;
+}
+
+sub imageKernelDeletion {
+	my $matroid = $_[0];
+	my $n = $_[1];
+	my $r = $_[2];
+	my $rangeChains = $_[3];
+	my $lengthOfRangeVector = $_[4];
+	
+	my $imageOfDeletion = zero_vector($lengthOfRangeVector);
+	
+	for my $i (0..$n-1){
+		 if($matroid->COLOOPS->contains($i) == false){
+			 my $matroidMinor = deletion($matroid,$i);
+			 my $listOfChainMatrices = chainsOfFlats($matroidMinor,$n-1,$r);
+			 my $indicatorVector = indicatorVectorProducer($matroidMinor,$n-1,$r,$rangeChains,$lengthOfRangeVector,$listOfChainMatrices);
+			 $imageOfDeletion = $imageOfDeletion+((-1)**$i)*$indicatorVector;
+		 }
+	}
+	
+	return $imageOfDeletion;
+}
+
+sub imageContractionDeletion {
+	my $matroid = $_[0];
+	my $n = $_[1];
+	my $r = $_[2];
+	my $rangeChains = $_[3];
+	my $lengthOfRangeVector = $_[4];
+	
+	my $imageOfDeletion = zero_vector($lengthOfRangeVector);
+	
+	for my $i (0..$n-1){
+		#The condition here is that closure(i) does not equal itself.
+		my $possibleFlat = new Set($i);
+		my $containsI = false;
+		for my $flat (@{$matroid->LATTICE_OF_FLATS->FACES}){
+			if($possibleFlat == $flat){
+				$containsI = 1;
+			}
+		}
+		if($containsI){
+			 my $matroidMinor = contraction($matroid,$i);
+			 my $listOfChainMatrices = chainsOfFlats($matroidMinor,$n-1,$r);
+			 my $indicatorVector = indicatorVectorProducer($matroidMinor,$n-1,$r,$rangeChains,$lengthOfRangeVector,$listOfChainMatrices);
+			 $imageOfDeletion = $imageOfDeletion+((-1)**$i)*$indicatorVector;
+		 }
+	}
+	
+	return $imageOfDeletion;
+}
+
 sub main {
-	my ($n,$r,$oper,$MATROIDCLASS) = getUserInfo();
+	my ($n,$r,$oper,$matroidType) = getUserInfo();
 	my $nMinusOne = $n-1;
 	my $rMinusOne = $r-1;
 	my $dualCheck = 0;
 		
 	#Obtains cursor from polyDB
-	my ($matroidsRN,$matroidsCount) = collectionFromPolyDB($n,$r,$MATROIDCLASS);
+	my ($matroidsRN,$matroidsCount) = collectionFromPolyDB($n,$r,$matroidType);
 	
 	if($r>$n/2){
 		$dualCheck =1;
