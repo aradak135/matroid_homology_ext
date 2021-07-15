@@ -1,0 +1,17 @@
+object Matroid {
+## INDICATOR VECTOR PROPERTIES ###
+
+# @category Advanced properties
+# Indictor vector in the intersection ring of matroids.
+property INDICATOR_VECTOR : Vector<Int>;
+
+rule INDICATOR_VECTOR  : BASES, N_ELEMENTS , RANK, LATTICE_OF_FLATS {
+	$this->INDICATOR_VECTOR = indicator_vector($this);
+}
+}
+
+# Local Variables:
+# mode: perl
+# cperl-indent-level: 3
+# indent-tabs-mode:nil
+# End:

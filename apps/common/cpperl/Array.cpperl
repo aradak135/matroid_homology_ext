@@ -1,0 +1,5 @@
+{"app": "common",
+ "inst": [
+  {"class": "Array<Matrix<Int>>", "include": ["polymake/Array.h", "polymake/IncidenceMatrix.h", "polymake/Matrix.h"], "pkg": "Polymake::common::Array__Matrix_A_Int_I_NonSymmetric_Z"},
+ null ],
+"version": 3}
