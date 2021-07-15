@@ -160,13 +160,13 @@ Vector<Int> contraction_vector_full(BigObject m, Array<Matrix<Int>> rangeChains)
 }
 
 UserFunctionTemplate4perl("# @category Other"
-                  "# Check if a given list of sets satisfies the axioms to be the flats of a matroid."
+                  "# Produces a vector corresponding to the alternating sum of the indicator vectorf of each single-element contraction"
                   "# @param Matroid a matroid whose indicator vector is to be computed"
                   "# @return Vector<Int>",
                   "contraction_vector(Matroid)");
 
 UserFunctionTemplate4perl("# @category Other"
-                  "# Check if a given list of sets satisfies the axioms to be the flats of a matroid."
+                  "# Produces a vector corresponding to the alternating sum of the indicator vectors of each single-element deletion"
                   "# @param Matroid a matroid whose indicator vector is to be computed"
                   "# @return Vector<Int>",
                   "deletion_vector(Matroid)");

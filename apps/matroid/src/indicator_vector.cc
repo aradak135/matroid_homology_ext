@@ -46,14 +46,14 @@ Vector<Int> indicator_vector(BigObject m){
 }
 
 UserFunctionTemplate4perl("# @category Other"
-                  "# Generates an array of chains representing a depth first search across the power set 2^n."
+                  "# Generates the indicator vector of flats associated to a matroid."
                   "# @param Matroid m the original matroid"
                   "# @return Vector<Int> an indicator vector [0/1] noting which of allChains are included in the matroid",
                   "indicator_vector(Matroid)");
 
 
 UserFunctionTemplate4perl("# @category Other"
-                  "# Generates an array of chains representing a depth first search across the power set 2^n."
+                  "# Generates an indicator vector of flats associated to a matroid"
                   "# @param Matroid m the original matroid (optional if allChains/matroidChains are provided)"
                   "# @param Array<Matrix<Int>> allChains the full list of chains available to the matroid"
                   "# @param Array<Matrix<Int>> matroidChains the list of maximal chains which define the matroid"
