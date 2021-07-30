@@ -1,8 +1,0 @@
-# last configured with:
-configure.command=
-root=/usr/share/polymake
-extroot=/home/aradak135/matroid_homology_ext
-RequireExtensions=
-super.app.includes=${app.includes}
-app.includes=-I${extroot}/include/app-wrappers -I${extroot}/include/apps ${super.app.includes}
-BuildModes=Opt Debug

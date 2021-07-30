@@ -1,3 +1,0 @@
-build ${extroot}/apps/common/cpperl/generated/Array.cc : gen_cpperl_mod ${extroot}/apps/common/cpperl/Array.cpperl | ${root}/support/generate_cpperl_modules.pl
-build ${extroot}/apps/common/cpperl/Array.cpperl : phony
-build ${builddir}/cpperl/gen.ninja : inspect ${extroot}/apps/common/cpperl/Array.cpperl || ${extroot}/apps/common/cpperl/generated/Array.cc
