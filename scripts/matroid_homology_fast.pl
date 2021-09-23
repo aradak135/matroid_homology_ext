@@ -76,13 +76,13 @@ sub collectionFromPolyDB {
 	my $matroidsCount;
 	
 	if($n/2>=$r){
-			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,$matroidType=>true});
-			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,$matroidType=>true});
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,$matroidType=>true,NESTED=>true,REGULAR=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($r), N_LOOPS => 0,$matroidType=>true,NESTED=>true,REGULAR=>true});
 		}
 		else{
 			# We use the fact that matorid classes of a fixed cyclic width are dual-closed, in particular cyclic width of one.
-			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,$matroidType=>true});
-			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0, $matroidType=>true});
+			$matroidsRN = $collection->find({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0,$matroidType=>true,NESTED=>true,REGULAR=>true});
+			$matroidsCount = $collection->count({N_ELEMENTS => int($n), RANK => int($n-$r), "DUAL.N_LOOPS" => 0, $matroidType=>true,NESTED=>true,REGULAR=>true});
 		}
 
 	if($matroidType eq "UNIFORM"){
