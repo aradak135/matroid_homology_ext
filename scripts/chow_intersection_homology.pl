@@ -1,10 +1,12 @@
-#From a matroid, generates the subring of the intersection ring graded by # of factors of corank 1 product and computes the homology imduced by deletion (which is where we've observed nontrivial homology
-#
+#From a matroid, generates the subring of the intersection ring which arises from
+# the degree c component of the Chow ring of a matroid.
+#We generate a monomial basis of the degree c component and then compute homology.
 #Implemented by Austin Alderete
 
 use application 'matroid';
 use Data::Dump qw(dump);
 
+#Define the collection to be pulled from polyDB.
 sub collectionFromPolyDB {
 	my $n = $_[0];
 	my $r = $_[1];
@@ -21,7 +23,11 @@ sub collectionFromPolyDB {
 		$loopColoop = "DUAL.N_LOOPS";
 	}
 	
-	#We only want the nested matroids here.
+	#-----------------------------USER EDIT HERE-------------------------------------
+	# Matroids must form a basis. Otherwise, use matroid_homology.
+	#Class must be minor-closed.
+	
+	#Add attributes as desired here. Note that uniform matroids are obtained by setting N_AUTOMORPHISMS to n!.
 	my $matroidsRN = $collection->find({
 		N_ELEMENTS => int($n),
 		RANK => int($r),
@@ -29,6 +35,8 @@ sub collectionFromPolyDB {
 		,NESTED=>true
 		});
 		
+	#------------------------------END USER EDIT--------------------------------
+	
 	if($matroidsRN->PolyDB::Cursor::has_next){
 		return $matroidsRN;
 	}
@@ -37,6 +45,7 @@ sub collectionFromPolyDB {
 	}
 }
 
+#This generates non-equal yet isomorphic matroids. It does so by computing all bases which arise from permutation and throwing out (via collect) duplicates.
 sub permNaiveAllMat {
 	my $matroidsRN = $_[0];
 	my $n = $_[1];
@@ -50,6 +59,20 @@ sub permNaiveAllMat {
 		if(2*$r>$n){
 			$matroid = dual($matroid);
 		}
+		
+		#------------------------USER EDIT-------------------------------
+		#Additional properties are checked here.
+		#if $matroid->N_CONNECTED_COMPONENTS-1 or $matroid->N_CONNECTED_COMPONENTS or $matroid->N_CONNECTED_COMPONENTS+1
+		# if(-1 > $matroid->N_CONNECTED_COMPONENTS){
+			# if($matroidsRN->PolyDB::Cursor::has_next){
+				# next;
+			# }
+			# else{
+				# last;
+			# }
+		# }
+		#------------------END USER EDIT-----------------------
+
 		my $allPossibleBases = new Set<Set<Set<Int>>>();
 		
 		for my $perm(@{group::all_group_elements($group->PERMUTATION_ACTION)}){
@@ -58,7 +81,6 @@ sub permNaiveAllMat {
 				push @{$permBases}, group::action($perm,$base);
 			}
 			my $permBaseSet = new Set<Set<Int>>($permBases);
-			#This avoids duplicates.
 			$allPossibleBases->collect($permBaseSet);
 		}
 		
@@ -70,214 +92,182 @@ sub permNaiveAllMat {
 	return $arrayAllMatroids;		
 }
 
-sub circuitMatroidHGConstructor {
-	my $m = $_[0];
-	my $n = $m->N_ELEMENTS;
-	# my $nSet = new Set<Int>(0..$n-1);
-	my $r = $m->RANK;
-	
-	#Due to the fact that singletons induce loops, we cannot preallocate using numProperFlats.
-	my $circuitMatroidHGList = new Array<Matroid>(0);
-	for my $flat (@{$m->LATTICE_OF_FLATS->FACES}){
-		if($flat->size >1 and $flat->size != $n){
-			my $tempMatroidHG = new Matroid(N_ELEMENTS=>$n,RANK=>$n-1,CIRCUITS=>[$flat]);
-			push @{$circuitMatroidHGList}, $tempMatroidHG;
-		}
-	}
-	
-	return $circuitMatroidHGList;
-}
-
-sub intersectionRingGenerator {
-	my $m = $_[0];
-	my $circuitMatroidHGList = $_[1];
-	
-	#We construct the array graded by CORANK and populate it inductively.
-	#The syntax here is troublesome
-		# @listOfGradedComponents = ();
-		# @arrayOfGeneratorsForAComponent = new Array<Matroid>(size)
-		# populate @arrayOfGeneratorsForAComponent
-		# push @listOfGradedComponents, \@arrayOfGeneratorsForAComponent
-	# Then to call do $listOfGradedComponents[corank]->[index]
-	
-	my @gradedComponents = ();
-	#We already have the corank 1 matroids
-	push @gradedComponents, \@{$circuitMatroidHGList};
-	# currentCorank indicates the corank of the last completed entry.
-	my $currentCorank = 1;
-	
-	while($currentCorank < $m->N_ELEMENTS-1){
-		my $recentComponent = $gradedComponents[-1];
-		my $currentComponent = new Array<Matroid>(0);
-		for my $matroidCorankK (@{$recentComponent}){
-			for my $matroidCorank1 (@{$circuitMatroidHGList}){
-				my $tempMatroidProduct = dual(union(dual($matroidCorank1),dual($matroidCorankK)));
-				if($tempMatroidProduct->N_LOOPS == 0){
-					#We need to check for duplicates. We have a few different options, but as the indicator vector of a matroid completely determines it and we will need those later, we compute those as they're stored with the matroid
-					
-					my $duplicateCheck = 0;
-					for my $tempMatroid (@{$currentComponent}){
-						if($tempMatroidProduct->INDICATOR_VECTOR == $tempMatroid->INDICATOR_VECTOR){
-							$duplicateCheck =1;
-						}
-					}
-					if($duplicateCheck ==0){
-						push @{$currentComponent}, $tempMatroidProduct;
-					}
-				}
-			}
-		}
-		push @gradedComponents,\@{$currentComponent};
-		$currentCorank +=1;
-	}
-	return @gradedComponents;
-}
-
-sub basisConstructor {
-	my $allMatroids = $_[0];
-	my $basisMatroids = new Array<Matroid>(0);
-	
-	my $matrixIndicators = new Matrix<Integer>();
-	
-	#This is a  temporary fix to avoid syntax errors
-	for my $matroid (@{$allMatroids}){
-		my $indicatorVector = new Vector<Integer>($matroid->INDICATOR_VECTOR);
-		$matrixIndicators = new Matrix<Integer>($indicatorVector->dim,0);
-		last;
-	}
-	
-	for my $matroid (@{$allMatroids}){
-		my $indicatorVector = new Vector<Integer>($matroid->INDICATOR_VECTOR);
-		
-		my $matrixIndicatorsAppend = new Matrix<Integer>($matrixIndicators|$indicatorVector);
-		if(is_zero(null_space_integer($matrixIndicatorsAppend))){
-			$matrixIndicators = $matrixIndicatorsAppend;
-			push @{$basisMatroids},$matroid;
-		}
-	}
-	return $basisMatroids;
-}
-
-sub boundaryMapAB {
+# Treats the given matroids as a basis and computes the deletion or contraction induced boundary map as a matrix with respect to this basis.
+sub boundaryMap {
 	my $allDomainMatroids = $_[0];
 	my $allRangeMatroids = $_[1];
 	my $n = $_[2];
 	my $r = $_[3];
+	my $domainDim = $_[4];
+	my $rangeDim = $_[5];
+	my $conOrdel = $_[6];
+	my $boundaryMatrix = new Matrix<Int>($domainDim,$rangeDim);
 	
-	my $boundaryMatrix = new Matrix<Int>($allDomainMatroids->size,$allRangeMatroids->size);
-	
-	for (my $domCount = 0; $domCount < $allDomainMatroids->size; $domCount++){
-		my $domMatroid = $allDomainMatroids->[$domCount];
-		my $tropicalCycle = new tropical::MatroidRingCycle<Max>($domMatroid);
-		
-		my @arrayNestedMatroids = $tropicalCycle->nested_matroids;
-		my $arrayNestedCoefficients = $tropicalCycle->NESTED_COEFFICIENTS;
-		
-		for (my $nestIndex =0; $nestIndex < $arrayNestedCoefficients->size; $nestIndex++){
-			my $nestedMatroid = $arrayNestedMatroids[$nestIndex];
-			my $nestCoef = $arrayNestedCoefficients->[$nestIndex];
-			for (my $elem =0; $elem<$n;$elem++){
-				my $delMatroid = deletion($nestedMatroid,$elem);
-				for (my $ranCount =0; $ranCount < $allRangeMatroids->size; $ranCount++){
-					if($delMatroid->BASES == $allRangeMatroids->[$ranCount]->BASES){
-						$boundaryMatrix->elem($domCount,$ranCount) += $nestIndex*(-1)**$elem;
+	if ($conOrdel == 0){
+		for (my $domCount = 0; $domCount <$domainDim;$domCount++){
+			my $currentDomMatroid = $allDomainMatroids->[$domCount];
+			for (my $elem = 0; $elem <$n; $elem++){
+				my $conMat = contraction($currentDomMatroid,$elem);
+				my $conMatBases = $conMat->BASES;
+				
+				for (my $ranCount = 0; $ranCount < $rangeDim ; $ranCount++){
+					my $ranMatBases = $allRangeMatroids->[$ranCount]->BASES;
+					if ($conMatBases == $ranMatBases ){
+						$boundaryMatrix->elem($domCount,$ranCount) += (-1)**$elem;
 					}
 				}
 			}
 		}
 	}
-	return $boundaryMatrix;
-}
-
-sub boundaryMapBC {
-	my $allDomainMatroids = $_[0];
-	my $allRangeMatroids = $_[1];
-	my $n = $_[2];
-	my $r = $_[3];
 	
-	my $boundaryMatrix = new Matrix<Int>($allDomainMatroids->size,$allRangeMatroids->size);
-	
-	for (my $domCount = 0; $domCount < $allDomainMatroids->size; $domCount++){
-		my $domMatroid = $allDomainMatroids->[$domCount];
-		for (my $elem =0; $elem<$n; $elem++){
-			my $delMatroid = deletion($domMatroid,$elem);
-			for (my $ranCount =0; $ranCount < $allRangeMatroids->size; $ranCount++){
-				if($delMatroid->BASES == $allRangeMatroids->[$ranCount]->BASES){
-					$boundaryMatrix->elem($domCount,$ranCount) += (-1)**$elem;
+	elsif ($conOrdel ==1){
+		for (my $domCount = 0; $domCount <$domainDim;$domCount++){
+			my $currentDomMatroid = $allDomainMatroids->[$domCount];
+			for (my $elem = 0; $elem <$n; $elem++){
+				my $delMat = deletion($currentDomMatroid,$elem);
+				my $delMatBases = $delMat->BASES;
+				
+				for (my $ranCount = 0; $ranCount < $rangeDim ; $ranCount++){
+					my $ranMatBases = $allRangeMatroids->[$ranCount]->BASES;
+					if ($delMatBases == $ranMatBases ){
+						$boundaryMatrix->elem($domCount,$ranCount) += (-1)**$elem;
+					}
 				}
 			}
 		}
 	}
+	
 	return $boundaryMatrix;
 }
 
-sub localHomologyDeletion {
-	my $A = $_[0];
+sub cleanUp {
+	#This throws out duplicates as there are many.
+	my $listOfMatroids = $_[0];
+	
+	my $cleanedUpList = new Array<Matroid>(0);
+	my $setOfAllBases = new Set<Set<Set<Int>>>();
+	for my $matroid (@{$listOfMatroids}){
+		my $bases = new Set<Set<Int>>($matroid->BASES);
+		if($setOfAllBases->contains($bases)){
+			next;
+		}
+		else {
+			push @{$cleanedUpList}, $matroid;
+			$setOfAllBases->collect($bases);
+		}
+	}
+	return $cleanedUpList;
+}
+
+sub principalChainTruncation  {
+	my $m = $_[0];
+	my $chainOfFlats = $_[1];
+	my $trunMatroid = $m;
+	
+	for my $i (1..$chainOfFlats->dim){
+		my $trunFlat = $chainOfFlats->[-$i];
+		$trunMatroid = principal_truncation($trunMatroid,$trunFlat);
+	}
+	return $trunMatroid;
+}
+
+sub truncatorRecursion {
+	my $m = $_[0];
 	my $n = $_[1];
 	my $r = $_[2];
+	my $c = $_[3];
+	my $lattice = $_[4];
+	my $flat = $_[5];
+	my $arrayMatroids = $_[6];
+	my $nodes = $_[7];
+	my $currentChainOfFlats = $_[8];
+	my $currentRank = $_[9];
 	
-	if($n-2<$r){
-		return true;
+	if(scalar(@{$nodes}) == 0){
+		return $arrayMatroids;
 	}
 	
-	#$A = basisConstructor($A);
-		
-	my $nmin1rMatroids = collectionFromPolyDB($n-1,$r);
-	my $nmin2rMatroids = collectionFromPolyDB($n-2,$r);
+	for my $node (@{$nodes}) {
+		my $superFlat = $lattice->FACES->[$node];
+		#This check requires that the rank(superSet)>rank(flat) otherwise we may have equality.
+		if($superFlat+$flat != $superFlat){
+			next;
+		}
+		my $rankSuper = $m->rank($superFlat);
+		my $rankDiff = $rankSuper - $currentRank;
+		for my $i (1..$rankDiff){
+			my $localChainOfFlats = $currentChainOfFlats;
+			for my $numberToAdd (1..$i){
+				$localChainOfFlats = $localChainOfFlats | $superFlat;
+			}
+			if($localChainOfFlats->dim == $c){
+				my $truncation = principalChainTruncation($m,$localChainOfFlats);
+				#print $localChainOfFlats , "\n";
+				if ($truncation->N_LOOPS == 0){
+					#print $localChainOfFlats, "\n";
+					#print $localChainOfFlats->dim, "\n";
+					push @{$arrayMatroids}, $truncation;
+				}
+				#return $arrayMatroids;
+			}
+			elsif($localChainOfFlats->dim > $c){
+				next;
+			}
+			else {
+				$arrayMatroids = truncatorRecursion($m,$n,$r,$c,$lattice,$superFlat,$arrayMatroids,$lattice->nodes_of_rank_range($rankSuper,$r),$localChainOfFlats,$rankSuper)
+			}
+		}
+	}
+	return $arrayMatroids;
+}
+
+# This functions as main for deletion.
+sub mainDel {
+	my $relativeNestedBases = $_[0];
+	my $testMatroid = $relativeNestedBases->[0];
+	my $n = $testMatroid->N_ELEMENTS;
+	my $r = $testMatroid->RANK;
+	
+	my $nmin1rMatroids = collectionFromPolyDB($n-1,$r,"NESTED");
+	my $nmin2rMatroids = collectionFromPolyDB($n-2,$r,"NESTED");
 	
 	my $allnmin1rMatroids = permNaiveAllMat($nmin1rMatroids,$n-1,$r);
 	my $allnmin2rMatroids = permNaiveAllMat($nmin2rMatroids,$n-2,$r);
 	
+	my $boundaryMatrix1 = boundaryMap($relativeNestedBases,$allnmin1rMatroids,$n,$r,$relativeNestedBases->size,$allnmin1rMatroids->size,1);
 	
-	my $conOrdel = 1;
+	my $boundaryMatrix0 = boundaryMap($allnmin1rMatroids,$allnmin2rMatroids,$n-2,$r,$allnmin1rMatroids->size,$allnmin2rMatroids->size,1);
 	
-	my $boundaryMatrix0 = boundaryMapAB($A,$allnmin1rMatroids,$n,$r);
-	my $boundaryMatrix1 = boundaryMapBC($allnmin1rMatroids,$allnmin2rMatroids,$n,$r);
-	
+	#Recast as sparse for input into topaz's homology.
 	$boundaryMatrix0 = new SparseMatrix<Integer>($boundaryMatrix0);
 	$boundaryMatrix1 = new SparseMatrix<Integer>($boundaryMatrix1);
 
-	my $arrayBoundaryMatrices = new Array<SparseMatrix<Integer>>($boundaryMatrix1,$boundaryMatrix0);
-	my $chainComplex = new topaz::ChainComplex<SparseMatrix<Integer>>($arrayBoundaryMatrices,1);
-	
+	my $arrayBoundaryMatrices = new Array<SparseMatrix<Integer>>($boundaryMatrix0,$boundaryMatrix1);
+	my $chainComplex = new topaz::ChainComplex<SparseMatrix<Integer>>($arrayBoundaryMatrices,0);
 	print "\n";
 	#The output can be used to find representatives of each homology class.
 	print topaz::homology_and_cycles($chainComplex,0)->[1];
 	print "\n";
-	
-	return true;
+	return;
 }
 
 sub main {
 	my $m = shift @ARGV;
+	my $c = shift @ARGV;
 	my $n = $m->N_ELEMENTS;
 	my $r = $m->RANK;
+	my $currentChainOfFlats = new Vector<Set<Int>>();
+	my $lattice = $m->LATTICE_OF_FLATS;
+	my $flat = new Set<Int>();
+	my $currentRank = 0;
+	my $arrayMatroids = new Array<Matroid>(0);
 	
-	if($r <3){
-		print "Rank must be at least 3. \n";
-		return true;
-	}
+	my $monomialBasisDegC =  truncatorRecursion($m,$n,$r,$c,$lattice,$flat,$arrayMatroids,$lattice->nodes_of_rank_range($currentRank,$r),$currentChainOfFlats,$currentRank);
 	
-	my $circuitMatroidHGList = circuitMatroidHGConstructor($m);	
-	my @gradedComponents = intersectionRingGenerator($m,$circuitMatroidHGList);
+	my $relativeNestedDegC = cleanUp($monomialBasisDegC);
 	
-	#Testing that the output is correct
-	#for my $array (@gradedComponents){
-	#	for my $matroidTest (@{$array}){
-	#		print $matroidTest->RANK;
-	#	}
-	#}
-	#-------------------
-	
-	for my $rankIndex (1..scalar(@gradedComponents)-2){
-		#It is important to note that @gradedComponents starts at corank 1. We go through the list backward as the end of the list is always rank 1 even though the lists are of different sizes. That is, -$rankIndex is actually the rank.
-		# This indexing is the correct one, so any errors are elsewhere.
-		#See localHomologyDeletion for an explanation of the notation.
-		
-		my $A = $gradedComponents[-$rankIndex];
-		localHomologyDeletion($A,$n,$rankIndex);
-	}
-	return true;
+	mainDel($relativeNestedDegC);
+	return;
 }
 
 main();
